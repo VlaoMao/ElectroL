@@ -1,0 +1,135 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use Net::FTP;
+use Getopt::Long;
+use Pod::Usage;
+use Image::Magick;
+use AtExit;
+
+my $outfile = "a.gif";
+my $day;
+my $month;
+my $year;
+my $help = 0;
+my $debug = 0;
+
+my @files = ();
+
+
+sub cleanup{
+	foreach my $x (@files) {
+		unlink $x if $x;
+	}
+	rmdir "tmp";
+}
+
+sub check_date {
+	my $day = shift;
+	my $month = shift;
+	my $year = shift;
+	if($year < 2012){return 0;}
+	if($month > 12 || $month < 1){return 0;}
+	if($day < 1){return 0;}
+	if($day > 31){return 0;}
+	return 1;
+}
+
+my %months = ("01" => "January",
+		   	  "02" => "February",
+		      "03" => "March",
+		      "04" => "April",
+		      "05" => "May",
+		      "06" => "June",
+		      "07" => "July",
+		      "08" => "August",
+		      "09" => "September",
+		      "10" => "October",
+		      "11" => "November",
+		      "12" => "December");
+
+atexit("cleanup");
+
+GetOptions("out|o=s" =>\$outfile,
+		   "debug|d!" => \$debug,
+		   "help|h" => sub{pod2usage(2);});
+
+$ARGV[0] =~ /(\d{2})(\d{2})(\d{4})/;
+$day = $1;
+$month = $2;
+$year = $3;
+
+die "Incorrect date format" if(!check_date($day, $month, $year));
+
+mkdir "tmp", 0775;
+
+my $ftp = Net::FTP->new("ftp.ntsomz.ru", Debug => $debug, Passive => 1, ) or die "Can't connect to server : $@";
+$ftp->login("electro","electro") or die "Can't login at server ", $ftp->message;
+
+my $resftp = Net::FTP->new("ftp1.rcpod.ru", Debug => $debug, Passive => 1) or die "Can't connect to server : $@";
+$resftp->login() or die "Can't login at server ", $resftp->message;
+
+$ftp->binary();
+$resftp->binary();
+
+$resftp->cwd("ElectroL") or die "Can't find directory", $resftp->message;
+
+$ftp->cwd($year) or die "Can't find directory ", $ftp->message;
+$resftp->cwd($year) or die "Can't find directory ", $resftp->message;
+$ftp->cwd($months{$month}) or die "Can't find directory ", $ftp->message;
+$resftp->cwd($months{$month}) or die "Can't find directory ", $resftp->message;
+$ftp->cwd($day) or die "Can't find directory ", $ftp->message;
+$resftp->cwd($day) or die "Can't find directory ", $resftp->message;
+for (my $i = 0; $i < 48; $i++) {
+	my $nextdir = ($i > 19 ? ($i - $i % 2) / 2 : "0" . ($i - $i % 2) / 2 ) . ($i % 2 ? "30" : "00" ); #generate all directories names	
+	if($nextdir le "0600" || $nextdir ge "0830"){
+		$ftp->cwd($nextdir) or die "Can't find directory ", $ftp->message;
+		my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg" or die "Can't download file ", ftp->message;
+		push @files, $ftp->get($addr, "tmp\/$i.jpg");
+		$ftp->cdup() or die "Can't find directory ", $ftp->message;
+	}
+	else{
+		$resftp->cwd($nextdir) or die "Can't find directory ", $resftp->message;
+		my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg" or die "Can't download file ", ftp->message;
+		push @files, $resftp->get($addr, "tmp\/$i.jpg");
+		$resftp->cdup() or die "Can't find directory ", $resftp->message;	
+	}
+}
+$ftp->quit;
+$resftp->quit;
+
+my $image = new Image::Magick;
+foreach my $x (@files) {
+	$image->Read($x) if $x;
+}
+$image->Contrast();
+
+for (my $x = 0; $image->[$x]; $x++)
+  {
+    $image->[$x]->Frame('1080x1080') if $image->[$x]->Get('magick') eq 'GIF';
+    undef $image->[$x] if $image->[$x]->Get('columns') < 1080;
+  }
+
+$image->Write($outfile);
+
+
+__END__
+
+=head1 NAME
+
+electro - program generates .gif file for curent date, using pictures from ElectroL satelite
+
+=head1 SYNOPSIS
+
+electro [options] <date>
+
+Options:
+
+	--out, -o 	 	- set output file
+
+	--debug, -d	 	- set debug level
+
+	--help, -h 	 	- show this message
+
+	date should be in ddmmyyyy format
