@@ -107,8 +107,9 @@ $image->Contrast();
 
 for (my $x = 0; $image->[$x]; $x++)
   {
-    $image->[$x]->Frame('1080x1080') if $image->[$x]->Get('magick') eq 'GIF';
-    undef $image->[$x] if $image->[$x]->Get('columns') < 1080;
+  	$image->[$x]->AdaptiveResize(width => 300, height => 300);
+    $image->[$x]->Frame('300x300') if $image->[$x]->Get('magick') eq 'GIF';
+    undef $image->[$x] if $image->[$x]->Get('columns') < 300;
   }
 
 $image->Write($outfile);
