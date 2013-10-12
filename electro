@@ -109,12 +109,12 @@ foreach my $x (@files) {
 }
 $image->Contrast();
 
-for (my $x = 0; $image->[$x]; $x++)
-  {
-  	$image->[$x]->AdaptiveResize(width => $scale, height => $scale) if ($scale !=1080);
+for (my $x = 0; $image->[$x]; $x++){
+  	$image->[$x]->AdaptiveResize(width => $scale, height => $scale) if ($scale < 1080);
+    $image->[$x]->Set(Compression => "LZW");
     $image->[$x]->Frame("$(scale)x$scale") if $image->[$x]->Get('magick') eq 'GIF';
-    undef $image->[$x] if $image->[$x]->Get('columns') < $scale;
-  }
+    undef $image->[$x] if $image->[$x]->Get('colors') == 1;
+}
 
 $image->Write($outfile);
 
