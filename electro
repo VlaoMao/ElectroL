@@ -7,6 +7,10 @@ use Getopt::Long;
 use Pod::Usage;
 use Image::Magick;
 use AtExit;
+use Log::Any::App qw($log), -syslog => 0, -screen =>{level => 'error',
+													 color => 0},
+										  -file => { level => 'info',
+									   	      		 path => 'electro.log'};
 
 my $outfile = "a.gif";
 my $day;
@@ -64,40 +68,57 @@ $year = $3;
 
 if(!$scale =~ /^d+$/){ $scale = 300;}
 
-die "Incorrect date format" if(!check_date($day, $month, $year));
+$log->crit("Incorrect date format") if(!check_date($day, $month, $year));
+$log->info("Start script with params:\n  date = $day $month $year\n  debug = $debug\n  output = $outfile\n  scale = $scale");
 
 mkdir "tmp", 0775;
 
-my $ftp = Net::FTP->new("ftp.ntsomz.ru", Debug => $debug, Passive => 1, ) or die "Can't connect to server : $@";
-$ftp->login("electro","electro") or die "Can't login at server ", $ftp->message;
+my $ftp = Net::FTP->new("ftp.ntsomz.ru", Debug => $debug, Passive => 1, ) or $log->crit("Can't connect to server, $@");
+$log->info("Connected to ftp://ftp.ntsomz.ru");
+$ftp->login("electro","electro") or $log->crit("Can't login at server ftp://ftp.ntsomz.ru");
+$log->info("Logged in at ftp://ftp.ntsomz.ru as electro");
 
-my $resftp = Net::FTP->new("ftp1.rcpod.ru", Debug => $debug, Passive => 1) or die "Can't connect to server : $@";
-$resftp->login() or die "Can't login at server ", $resftp->message;
+my $resftp = Net::FTP->new("ftp1.rcpod.ru", Debug => $debug, Passive => 1) or $log->crit("Can't connect to server, $@");
+$log->info("Connected to ftp://ftp1.rcpod.ru");
+$resftp->login() or $log->crit("Can't login at server at server ftp://ftp1.rcpod.ru");
+$log->info("Logged in at ftp://ftp1.rcpod.ru");
 
 $ftp->binary();
 $resftp->binary();
 
-$resftp->cwd("ElectroL") or die "Can't find directory", $resftp->message;
+$resftp->cwd("ElectroL") or $log->error("Can't find directory");
 
-$ftp->cwd($year) or die "Can't find directory ", $ftp->message;
-$resftp->cwd($year) or die "Can't find directory ", $resftp->message;
-$ftp->cwd($months{$month}) or die "Can't find directory ", $ftp->message;
-$resftp->cwd($months{$month}) or die "Can't find directory ", $resftp->message;
-$ftp->cwd($day) or die "Can't find directory ", $ftp->message;
-$resftp->cwd($day) or die "Can't find directory ", $resftp->message;
+$ftp->cwd($year) or $log->error("Can't find directory $year");
+$resftp->cwd($year) or $log->error("Can't find directory $year");
+$ftp->cwd($months{$month}) or $log->error("Can't find directory $months{$month}");
+$resftp->cwd($months{$month}) or $log->error("Can't find directory $months{$month}");
+$ftp->cwd($day) or $log->error("Can't find directory $day");
+$resftp->cwd($day) or $log->error("Can't find directory $day");
 for (my $i = 0; $i < 48; $i++) {
 	my $nextdir = ($i > 19 ? ($i - $i % 2) / 2 : "0" . ($i - $i % 2) / 2 ) . ($i % 2 ? "30" : "00" ); #generate all directories names	
 	if($nextdir le "0600" || $nextdir ge "0830"){
-		$ftp->cwd($nextdir) or die "Can't find directory ", $ftp->message;
-		my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg" or die "Can't download file ", ftp->message;
-		push @files, $ftp->get($addr, "tmp\/$i.jpg");
-		$ftp->cdup() or die "Can't find directory ", $ftp->message;
+		if($ftp->cwd($nextdir)){
+			my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg";
+			if(my $tmp = $ftp->get($addr, "tmp\/$i.jpg")){
+				$log->info("Download file $addr");
+				push @files, $tmp;
+			}
+			else{$log->error("Can't download file $addr");}
+			$ftp->cdup() or $log->error("Can't find prev directory");
+		}
+		else{$log->error("Can't find directory $nextdir");}
 	}
 	else{
-		$resftp->cwd($nextdir) or die "Can't find directory ", $resftp->message;
-		my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg" or die "Can't download file ", ftp->message;
-		push @files, $resftp->get($addr, "tmp\/$i.jpg");
-		$resftp->cdup() or die "Can't find directory ", $resftp->message;	
+		if($resftp->cwd($nextdir)){
+			my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg";
+			if(my $tmp = $resftp->get($addr, "tmp\/$i.jpg")){
+				$log->info("Download file $addr");
+				push @files, $tmp;
+			}
+			else{$log->error("Can't download file $addr");}
+			$resftp->cdup() or $log->error("Can't find prev directory");
+		}
+		else{$log->error("Can't find directory $nextdir");}	
 	}
 }
 $ftp->quit;
@@ -105,19 +126,24 @@ $resftp->quit;
 
 my $image = new Image::Magick;
 foreach my $x (@files) {
-	$image->Read($x) if $x;
+	if($x){
+		$image->Read($x);
+		$log->info("Load file " . $x);
+	}
 }
 $image->Contrast();
 
 for (my $x = 0; $image->[$x]; $x++){
   	$image->[$x]->AdaptiveResize(width => $scale, height => $scale) if ($scale < 1080);
-    $image->[$x]->Set(Compression => "LZW");
     $image->[$x]->Frame("$(scale)x$scale") if $image->[$x]->Get('magick') eq 'GIF';
-    undef $image->[$x] if $image->[$x]->Get('colors') == 1;
+    if($image->[$x]->Get('colors') == 1){
+    	undef $image->[$x];
+    	$log->warn("Image $x was dropped");
+    }
+    else{$log->info("Image $x was proccessed")}
 }
 
 $image->Write($outfile);
-
 
 __END__
 
@@ -131,12 +157,12 @@ electro [options] <date>
 
 Options:
 
-	--out, -o 	 	- set output file
+	--out, -o 	  		- set output file
 
-	--debug, -d	 	- set debug level
+	--debug, -d	 		- set debug level
 
-	--scale, -s 	- set result size 
+	--scale, -s 		- set result size 
 
-	--help, -h 	 	- show this message
+	--help, -h 	 		- show this message
 
 	date should be in ddmmyyyy format
