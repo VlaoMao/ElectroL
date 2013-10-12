@@ -14,6 +14,7 @@ my $month;
 my $year;
 my $help = 0;
 my $debug = 0;
+my $scale = 300;
 
 my @files = ();
 
@@ -53,12 +54,15 @@ atexit("cleanup");
 
 GetOptions("out|o=s" =>\$outfile,
 		   "debug|d!" => \$debug,
+		   "scale|s=s" => \$scale,
 		   "help|h" => sub{pod2usage(2);});
 
 $ARGV[0] =~ /(\d{2})(\d{2})(\d{4})/;
 $day = $1;
 $month = $2;
 $year = $3;
+
+if(!$scale =~ /^d+$/){ $scale = 300;}
 
 die "Incorrect date format" if(!check_date($day, $month, $year));
 
@@ -107,9 +111,9 @@ $image->Contrast();
 
 for (my $x = 0; $image->[$x]; $x++)
   {
-  	$image->[$x]->AdaptiveResize(width => 300, height => 300);
-    $image->[$x]->Frame('300x300') if $image->[$x]->Get('magick') eq 'GIF';
-    undef $image->[$x] if $image->[$x]->Get('columns') < 300;
+  	$image->[$x]->AdaptiveResize(width => $scale, height => $scale) if ($scale !=1080);
+    $image->[$x]->Frame("$(scale)x$scale") if $image->[$x]->Get('magick') eq 'GIF';
+    undef $image->[$x] if $image->[$x]->Get('columns') < $scale;
   }
 
 $image->Write($outfile);
@@ -130,6 +134,8 @@ Options:
 	--out, -o 	 	- set output file
 
 	--debug, -d	 	- set debug level
+
+	--scale, -s 	- set result size 
 
 	--help, -h 	 	- show this message
 
