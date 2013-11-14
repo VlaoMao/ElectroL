@@ -61,10 +61,7 @@ GetOptions("out|o=s" =>\$outfile,
 		   "scale|s=s" => \$scale,
 		   "help|h" => sub{pod2usage(2);});
 
-$ARGV[0] =~ /(\d{2})(\d{2})(\d{4})/;
-$day = $1;
-$month = $2;
-$year = $3;
+($day, $month, $year) = $ARGV[0] =~ /(\d{2})(\d{2})(\d{4})/;
 
 if(!$scale =~ /^d+$/){ $scale = 300;}
 
