@@ -75,22 +75,12 @@ $log->info("Connected to ftp://ftp.ntsomz.ru");
 $ftp->login("electro","electro") or $log->crit("Can't login at server ftp://ftp.ntsomz.ru");
 $log->info("Logged in at ftp://ftp.ntsomz.ru as electro");
 
-my $resftp = Net::FTP->new("ftp1.rcpod.ru", Debug => $debug, Passive => 1) or $log->crit("Can't connect to server, $@");
-$log->info("Connected to ftp://ftp1.rcpod.ru");
-$resftp->login() or $log->crit("Can't login at server at server ftp://ftp1.rcpod.ru");
-$log->info("Logged in at ftp://ftp1.rcpod.ru");
-
 $ftp->binary();
-$resftp->binary();
 
-$resftp->cwd("ElectroL") or $log->error("Can't find directory");
-
+$ftp->cwd("ELECTRO_L_2") or $log->error("Can't find directory ELECTRO_L_2");
 $ftp->cwd($year) or $log->error("Can't find directory $year");
-$resftp->cwd($year) or $log->error("Can't find directory $year");
 $ftp->cwd($months{$month}) or $log->error("Can't find directory $months{$month}");
-$resftp->cwd($months{$month}) or $log->error("Can't find directory $months{$month}");
 $ftp->cwd($day) or $log->error("Can't find directory $day");
-$resftp->cwd($day) or $log->error("Can't find directory $day");
 for (my $i = 0; $i < 48; $i++) {
 	my $nextdir = ($i > 19 ? ($i - $i % 2) / 2 : "0" . ($i - $i % 2) / 2 ) . ($i % 2 ? "30" : "00" ); #generate all directories names	
 	if($nextdir le "0600" || $nextdir ge "0830"){
@@ -105,21 +95,8 @@ for (my $i = 0; $i < 48; $i++) {
 		}
 		else{$log->error("Can't find directory $nextdir");}
 	}
-	else{
-		if($resftp->cwd($nextdir)){
-			my $addr = ($year % 100) . $month . $day . "_" . $nextdir . "_RGB.jpg";
-			if(my $tmp = $resftp->get($addr, "tmp\/$i.jpg")){
-				$log->info("Download file $addr");
-				push @files, $tmp;
-			}
-			else{$log->error("Can't download file $addr");}
-			$resftp->cdup() or $log->error("Can't find prev directory");
-		}
-		else{$log->error("Can't find directory $nextdir");}	
-	}
 }
 $ftp->quit;
-$resftp->quit;
 
 my $image = new Image::Magick;
 foreach my $x (@files) {
